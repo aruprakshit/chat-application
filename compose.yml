@@ -4,6 +4,8 @@ services:
     working_dir: /app
     volumes:
       - ./backend:/app
+    environment:
+      - PORT=9090
     ports:
-      - "8080:8080"
+      - "8080:9090"
     command: go run main.go

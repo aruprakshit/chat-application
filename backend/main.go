@@ -4,11 +4,18 @@ import (
 	"encoding/json"
 	"log"
 	"net/http"
+	"os"
 )
 
 type HealthResponse struct {
 	Status  string `json:"status"`
 	Service string `json:"service"`
+}
+
+func newRouter() http.Handler {
+	mux := http.NewServeMux()
+	mux.HandleFunc("GET /health", healthHandler)
+	return mux
 }
 
 func healthHandler(w http.ResponseWriter, r *http.Request) {
@@ -25,8 +32,12 @@ func healthHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func main() {
-	http.HandleFunc("GET /health", healthHandler)
+	port := os.Getenv("PORT")
+	if port == "" {
+		port = "8080"
+	}
 
-	log.Println("Server listening on port 8080")
-	log.Fatal(http.ListenAndServe(":8080", nil))
+	address := ":" + port
+	log.Println("Server listening on port", port)
+	log.Fatal(http.ListenAndServe(address, newRouter()))
 }

@@ -1,0 +1,14 @@
+playground/
+
+# Local secrets
+.env
+.env.*
+!.env.example
+
+# Frontend dependencies and build output
+node_modules/
+.next/
+
+# Editor and OS files
+.DS_Store
+Thumbs.db
