@@ -5,7 +5,18 @@ services:
     volumes:
       - ./backend:/app
     environment:
-      - PORT=9090
+      PORT: 9090
     ports:
       - "8080:9090"
     command: go run main.go
+  db:
+    image: postgres:18-alpine
+    environment:
+      POSTGRES_USER: chat
+      POSTGRES_PASSWORD: chat_local_only
+      POSTGRES_DB: chat
+    volumes:
+      - postgres_data:/var/lib/postgresql
+
+volumes:
+  postgres_data:
