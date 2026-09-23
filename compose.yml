@@ -9,6 +9,9 @@ services:
     ports:
       - "8080:9090"
     command: go run main.go
+    depends_on:
+      db:
+        condition: service_healthy
   db:
     image: postgres:18-alpine
     environment:
@@ -17,6 +20,12 @@ services:
       POSTGRES_DB: chat
     volumes:
       - postgres_data:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U chat -d chat"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+      start_period: 10s
 
 volumes:
   postgres_data:
