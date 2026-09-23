@@ -6,6 +6,7 @@ services:
       - ./backend:/app
     environment:
       PORT: 9090
+      DATABASE_URL: "postgres://chat:chat_local_only@db:5432/chat?sslmode=disable&pool_max_conns=5"
     ports:
       - "8080:9090"
     command: go run main.go
