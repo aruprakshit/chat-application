@@ -40,7 +40,7 @@ func TestHealthHandler(t *testing.T) {
 
 func TestRouterRejectsPostHealth(t *testing.T) {
 	// ARRANGE
-	router := newRouter()
+	router := newRouter(nil)
 	request := httptest.NewRequest(http.MethodPost, "/health", nil)
 	recorder := httptest.NewRecorder()
 

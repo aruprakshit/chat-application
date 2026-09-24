@@ -16,9 +16,10 @@ type HealthResponse struct {
 	Service string `json:"service"`
 }
 
-func newRouter() http.Handler {
+func newRouter(pool *pgxpool.Pool) http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /health", healthHandler)
+	mux.HandleFunc("GET /users", usersHandler(pool))
 	return mux
 }
 
@@ -70,5 +71,5 @@ func run() error {
 	address := ":" + port
 	log.Printf("Server listening on %s", address)
 
-	return http.ListenAndServe(address, newRouter())
+	return http.ListenAndServe(address, newRouter(pool))
 }
