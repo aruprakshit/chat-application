@@ -20,6 +20,7 @@ func newRouter(pool *pgxpool.Pool) http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /health", healthHandler)
 	mux.HandleFunc("GET /users", usersHandler(pool))
+	mux.HandleFunc("POST /users", createUserHandler(pool))
 	return mux
 }
 
