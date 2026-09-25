@@ -72,5 +72,5 @@ func run() error {
 	address := ":" + port
 	log.Printf("Server listening on %s", address)
 
-	return http.ListenAndServe(address, newRouter(pool))
+	return http.ListenAndServe(address, requestLogger(newRouter(pool)))
 }

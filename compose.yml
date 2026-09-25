@@ -27,6 +27,7 @@ services:
       timeout: 3s
       retries: 5
       start_period: 10s
+    command: ["postgres", "-c", "log_min_duration_statement=0"]
 
 volumes:
   postgres_data:
