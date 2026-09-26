@@ -11,8 +11,8 @@ services:
       - "8080:9090"
     command: go run .
     depends_on:
-      db:
-        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
   db:
     image: postgres:18-alpine
     environment:
@@ -28,6 +28,58 @@ services:
       retries: 5
       start_period: 10s
     command: ["postgres", "-c", "log_min_duration_statement=0"]
+  test-db:
+    image: postgres:18-alpine
+    profiles: ["test"]
+    environment:
+      POSTGRES_USER: chat_test
+      POSTGRES_PASSWORD: chat_test_only
+      POSTGRES_DB: chat_test
+    tmpfs:
+      - /var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U chat_test -d chat_test"]
+      interval: 2s
+      timeout: 3s
+      retries: 15
+  migrate:
+    image: migrate/migrate:4
+    environment:
+      DATABASE_URL: "postgres://chat:chat_local_only@db:5432/chat?sslmode=disable"
+    volumes:
+      - ./backend/migrations:/migrations:ro
+      - ./backend/migrate.sh:/migrate.sh:ro
+    entrypoint: ["/bin/sh", "/migrate.sh"]
+    command: ["up"]
+    depends_on:
+      db:
+        condition: service_healthy
+  test-migrate:
+    image: migrate/migrate:4
+    profiles: ["test"]
+    environment:
+      DATABASE_URL: "postgres://chat_test:chat_test_only@test-db:5432/chat_test?sslmode=disable"
+    volumes:
+      - ./backend/migrations:/migrations:ro
+      - ./backend/migrate.sh:/migrate.sh:ro
+    entrypoint: ["/bin/sh", "/migrate.sh"]
+    command: ["up"]
+    depends_on:
+      test-db:
+        condition: service_healthy
+
+  tests:
+    image: golang:1.27-alpine
+    profiles: ["test"]
+    working_dir: /app
+    environment:
+      TEST_DATABASE_URL: "postgres://chat_test:chat_test_only@test-db:5432/chat_test?sslmode=disable"
+    volumes:
+      - ./backend:/app
+    command: ["go", "test", "-v", "-count=1", "./..."]
+    depends_on:
+      test-migrate:
+        condition: service_completed_successfully
 
 volumes:
   postgres_data:
