@@ -49,7 +49,7 @@ func TestCreateUserRejectsInvalidInput(t *testing.T) {
 		{
 			name:        "unknown field",
 			contentType: "application/json",
-			body:        `{"username":"bob","admin":true}`,
+			body:        `{"username":"bob", "password":"test-only-password-123", "admin":true}`,
 			wantStatus:  http.StatusBadRequest,
 		},
 		{
@@ -62,6 +62,24 @@ func TestCreateUserRejectsInvalidInput(t *testing.T) {
 			name:        "oversized body",
 			contentType: "application/json",
 			body:        `{"username":"` + strings.Repeat("a", 1100) + `"}`,
+			wantStatus:  http.StatusBadRequest,
+		},
+		{
+			name:        "missing password",
+			contentType: "application/json",
+			body:        `{"username":"bob"}`,
+			wantStatus:  http.StatusBadRequest,
+		},
+		{
+			name:        "short password",
+			contentType: "application/json",
+			body:        `{"username":"bob","password":"short"}`,
+			wantStatus:  http.StatusBadRequest,
+		},
+		{
+			name:        "password exceeds bcrypt limit",
+			contentType: "application/json",
+			body:        `{"username":"bob","password":"` + strings.Repeat("a", 73) + `"}`,
 			wantStatus:  http.StatusBadRequest,
 		},
 	}

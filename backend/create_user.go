@@ -13,6 +13,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"golang.org/x/crypto/bcrypt"
 )
 
 // Compile the username rule once, rather than on every request.
@@ -20,6 +21,7 @@ var usernamePattern = regexp.MustCompile(`^[a-z0-9_]{3,50}$`)
 
 type CreateUserRequest struct {
 	Username string `json:"username"`
+	Password string `json:"password"`
 }
 
 func createUserHandler(pool *pgxpool.Pool) http.HandlerFunc {
@@ -65,19 +67,43 @@ func createUserHandler(pool *pgxpool.Pool) http.HandlerFunc {
 			return
 		}
 
+		// VALIDATE THE PASSWORD
+		// For this exercise, accept 12-72 bytes.
+		// Go's len(string) counts bytes, not Unicode characters.
+		if len(input.Password) < 12 || len(input.Password) > 72 {
+			http.Error(w, "Password must be between 12 and 72 bytes",
+				http.StatusBadRequest)
+			return
+		}
+
+		// HASH BEFORE BORROWING A DATABASE CONNECTION
+		// bcrypt generates a random salt and includes it in the encoded hash.
+		// Never log the password or the resulting hash.
+		passwordHash, err := bcrypt.GenerateFromPassword(
+			[]byte(input.Password),
+			bcrypt.DefaultCost,
+		)
+		if err != nil {
+			log.Printf("Hash password: %v", err)
+			http.Error(w, "Could not create user",
+				http.StatusInternalServerError)
+			return
+		}
+
 		// 4. INSERT WITH A DATABASE DEADLINE
 		// $1 keeps user input separate from SQL instructions.
 		// PostgreSQL's unique constraint handles competing inserts safely.
 		ctx, cancel := context.WithTimeout(r.Context(), 3*time.Second)
 		defer cancel()
 
+		// STORE THE HASH, RETURN ONLY PUBLIC USER FIELDS
 		var user User
 		err = pool.QueryRow(ctx, `
-			INSERT INTO users (username)
-			VALUES ($1)
+			INSERT INTO users (username, password_hash)
+			VALUES ($1, $2)
 			ON CONFLICT (username) DO NOTHING
 			RETURNING id, username
-		`, input.Username).Scan(&user.ID, &user.Username)
+		`, input.Username, string(passwordHash)).Scan(&user.ID, &user.Username)
 
 		// 5. TRANSLATE DATABASE RESULTS INTO HTTP RESPONSES
 		// A duplicate skips the insert, so RETURNING produces no row.

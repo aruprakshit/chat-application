@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
+	"golang.org/x/crypto/bcrypt"
 )
 
 func TestCreateUserIntegration(t *testing.T) {
@@ -39,7 +40,8 @@ func TestCreateUserIntegration(t *testing.T) {
 	// 2. ARRANGE A UNIQUE USER AND ROUTER
 	// A random suffix prevents collisions between repeated test runs.
 	username := "test_" + strings.ToLower(rand.Text())
-	body := `{"username":"` + username + `"}`
+	password := "test-only-password-123"
+	body := `{"username":"` + username + `","password":"` + password + `"}`
 	router := newRouter(pool)
 
 	// Remove this test's row even if a later assertion fails.
@@ -95,6 +97,36 @@ func TestCreateUserIntegration(t *testing.T) {
 	if storedUsername != username {
 		t.Fatalf("expected stored username %q, got %q",
 			username, storedUsername)
+	}
+	// VERIFY THAT A USABLE HASH WAS STORED
+	var storedHash string
+	err = pool.QueryRow(ctx,
+		"SELECT password_hash FROM users WHERE id = $1",
+		created.ID,
+	).Scan(&storedHash)
+	if err != nil {
+		t.Fatalf("read stored password hash: %v", err)
+	}
+
+	if storedHash == password {
+		t.Fatal("database contains the plaintext password")
+	}
+
+	if err := bcrypt.CompareHashAndPassword(
+		[]byte(storedHash), []byte(password),
+	); err != nil {
+		t.Fatal("stored hash does not match the submitted password")
+	}
+
+	// VERIFY THAT THE RESPONSE CONTAINS ONLY PUBLIC FIELDS
+	var responseFields map[string]json.RawMessage
+	if err := json.Unmarshal(recorder.Body.Bytes(), &responseFields); err != nil {
+		t.Fatalf("decode response fields: %v", err)
+	}
+	for field := range responseFields {
+		if field != "id" && field != "username" {
+			t.Errorf("unexpected response field: %s", field)
+		}
 	}
 
 	// 5. ACT: TRY THE SAME USERNAME AGAIN
