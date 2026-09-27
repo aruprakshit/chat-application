@@ -26,6 +26,7 @@ func newRouter(pool *pgxpool.Pool) http.Handler {
 	mux.HandleFunc("GET /ready", readinessHandler(pool))
 	mux.HandleFunc("GET /users", usersHandler(pool))
 	mux.HandleFunc("POST /users", createUserHandler(pool))
+	mux.Handle("GET /me", requireAuth(pool, http.HandlerFunc(meHandler)))
 	mux.HandleFunc("POST /login", loginHandler(pool, secureCookie))
 	return mux
 }
