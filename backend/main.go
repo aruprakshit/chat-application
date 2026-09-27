@@ -28,6 +28,13 @@ func newRouter(pool *pgxpool.Pool) http.Handler {
 	mux.HandleFunc("POST /users", createUserHandler(pool))
 	mux.Handle("GET /me", requireAuth(pool, http.HandlerFunc(meHandler)))
 	mux.HandleFunc("POST /login", loginHandler(pool, secureCookie))
+	// Block cross-origin browser requests that could log a user out.
+	mux.Handle(
+		"POST /logout",
+		http.NewCrossOriginProtection().Handler(
+			logoutHandler(pool, secureCookie),
+		),
+	)
 	return mux
 }
 
