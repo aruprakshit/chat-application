@@ -17,11 +17,16 @@ type HealthResponse struct {
 }
 
 func newRouter(pool *pgxpool.Pool) http.Handler {
+	// Default to HTTPS-only cookies.
+	// Disable explicitly only for local HTTP development.
+	secureCookie := os.Getenv("COOKIE_SECURE") != "false"
+
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /health", healthHandler)
 	mux.HandleFunc("GET /ready", readinessHandler(pool))
 	mux.HandleFunc("GET /users", usersHandler(pool))
 	mux.HandleFunc("POST /users", createUserHandler(pool))
+	mux.HandleFunc("POST /login", loginHandler(pool, secureCookie))
 	return mux
 }
 

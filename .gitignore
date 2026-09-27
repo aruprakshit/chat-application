@@ -12,3 +12,5 @@ node_modules/
 # Editor and OS files
 .DS_Store
 Thumbs.db
+# Local authentication testing
+cookies.txt
