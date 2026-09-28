@@ -241,4 +241,97 @@ func TestCreateConversationIntegration(t *testing.T) {
 		t.Errorf("failed request created a conversation: before=%d after=%d",
 			countBefore, countAfter)
 	}
+
+	// 8. VERIFY ROLLBACK AFTER CONVERSATION INSERTION
+	t.Run("membership failure rolls back conversation", func(t *testing.T) {
+		testCtx, testCancel := context.WithTimeout(
+			context.Background(), 10*time.Second,
+		)
+		defer testCancel()
+
+		// ARRANGE: Temporarily reject new memberships for our participant.
+		// NOT VALID skips checking existing rows, but checks new writes.
+		// The formatted value is an internally generated int64, not user text.
+		_, err := pool.Exec(testCtx, fmt.Sprintf(`
+		ALTER TABLE conversation_members
+		ADD CONSTRAINT rtc027_reject_test_member
+		CHECK (user_id <> %d) NOT VALID
+	`, userIDs[1]))
+		if err != nil {
+			t.Fatalf("install failure constraint: %v", err)
+		}
+
+		// Remove the test-only constraint even if an assertion fails.
+		// Subtest cleanup runs before the parent closes the database pool.
+		t.Cleanup(func() {
+			cleanupCtx, cleanupCancel := context.WithTimeout(
+				context.Background(), 5*time.Second,
+			)
+			defer cleanupCancel()
+
+			_, err := pool.Exec(cleanupCtx, `
+			ALTER TABLE conversation_members
+			DROP CONSTRAINT rtc027_reject_test_member
+		`)
+			if err != nil {
+				t.Errorf("remove failure constraint: %v", err)
+			}
+		})
+
+		// Record both table counts before making the request.
+		var conversationsBefore, membershipsBefore int
+		err = pool.QueryRow(testCtx, `
+		SELECT
+			(SELECT count(*) FROM conversations),
+			(SELECT count(*) FROM conversation_members)
+	`).Scan(&conversationsBefore, &membershipsBefore)
+		if err != nil {
+			t.Fatalf("read initial counts: %v", err)
+		}
+
+		// ACT: Send a valid request through authentication and the handler.
+		request := httptest.NewRequest(
+			http.MethodPost,
+			"/conversations",
+			strings.NewReader(
+				fmt.Sprintf(`{"participant_id":%d}`, userIDs[1]),
+			),
+		)
+		request.Header.Set("Content-Type", "application/json")
+		request.AddCookie(&http.Cookie{
+			Name:  "session",
+			Value: tokens[0],
+		})
+		recorder := httptest.NewRecorder()
+
+		router.ServeHTTP(recorder, request)
+
+		// ASSERT: The client gets a generic error, not a false success.
+		if recorder.Code != http.StatusInternalServerError {
+			t.Errorf("expected 500, got %d", recorder.Code)
+		}
+		if strings.TrimSpace(recorder.Body.String()) != "Could not create conversation" {
+			t.Errorf("unexpected error response: %q", recorder.Body.String())
+		}
+
+		// ASSERT: Neither the conversation nor partial memberships survived.
+		var conversationsAfter, membershipsAfter int
+		err = pool.QueryRow(testCtx, `
+		SELECT
+			(SELECT count(*) FROM conversations),
+			(SELECT count(*) FROM conversation_members)
+	`).Scan(&conversationsAfter, &membershipsAfter)
+		if err != nil {
+			t.Fatalf("read final counts: %v", err)
+		}
+
+		if conversationsAfter != conversationsBefore {
+			t.Errorf("conversation leaked: before=%d after=%d",
+				conversationsBefore, conversationsAfter)
+		}
+		if membershipsAfter != membershipsBefore {
+			t.Errorf("memberships leaked: before=%d after=%d",
+				membershipsBefore, membershipsAfter)
+		}
+	})
 }
