@@ -334,4 +334,132 @@ func TestCreateConversationIntegration(t *testing.T) {
 				membershipsBefore, membershipsAfter)
 		}
 	})
+
+	// 9. VERIFY THAT ROUTE PROTECTION BLOCKS REQUESTS BEFORE WRITING DATA
+	t.Run("route protection creates no records", func(t *testing.T) {
+		testCtx, testCancel := context.WithTimeout(
+			context.Background(), 10*time.Second,
+		)
+		defer testCancel()
+
+		// ARRANGE: A correctly formatted token that has no database session.
+		unknownToken, _ := newSessionToken()
+
+		// ARRANGE: A stored session that has already expired.
+		// Set created_at in the past to satisfy our expiry constraint.
+		expiredToken, expiredHash := newSessionToken()
+		_, err := pool.Exec(testCtx, `
+		INSERT INTO sessions (
+			token_hash, user_id, created_at, expires_at
+		)
+		VALUES (
+			$1,
+			$2,
+			CURRENT_TIMESTAMP - INTERVAL '2 hours',
+			CURRENT_TIMESTAMP - INTERVAL '1 hour'
+		)
+	        `, expiredHash, userIDs[0])
+		if err != nil {
+			t.Fatalf("create expired session: %v", err)
+		}
+
+		// The parent's user cleanup also deletes this session via CASCADE.
+		tests := []struct {
+			name       string
+			token      string
+			origin     string
+			wantStatus int
+		}{
+			{
+				name:       "missing cookie",
+				wantStatus: http.StatusUnauthorized,
+			},
+			{
+				name:       "malformed token",
+				token:      "invalid-token",
+				wantStatus: http.StatusUnauthorized,
+			},
+			{
+				name:       "unknown session",
+				token:      unknownToken,
+				wantStatus: http.StatusUnauthorized,
+			},
+			{
+				name:       "expired session",
+				token:      expiredToken,
+				wantStatus: http.StatusUnauthorized,
+			},
+			{
+				name:       "cross-origin request with valid session",
+				token:      tokens[0],
+				origin:     "https://untrusted.example",
+				wantStatus: http.StatusForbidden,
+			},
+		}
+
+		for _, tt := range tests {
+			t.Run(tt.name, func(t *testing.T) {
+				// ARRANGE: Record the initial database state.
+				var conversationsBefore, membershipsBefore int
+				err := pool.QueryRow(testCtx, `
+				SELECT
+					(SELECT count(*) FROM conversations),
+					(SELECT count(*) FROM conversation_members)
+			`).Scan(&conversationsBefore, &membershipsBefore)
+				if err != nil {
+					t.Fatal(err)
+				}
+
+				request := httptest.NewRequest(
+					http.MethodPost,
+					"/conversations",
+					strings.NewReader(
+						fmt.Sprintf(`{"participant_id":%d}`, userIDs[1]),
+					),
+				)
+				request.Header.Set("Content-Type", "application/json")
+
+				if tt.token != "" {
+					request.AddCookie(&http.Cookie{
+						Name:  "session",
+						Value: tt.token,
+					})
+				}
+				if tt.origin != "" {
+					request.Header.Set("Origin", tt.origin)
+				}
+
+				recorder := httptest.NewRecorder()
+
+				// ACT: Exercise the real middleware chain.
+				router.ServeHTTP(recorder, request)
+
+				// ASSERT: Reject the request with the expected status.
+				if recorder.Code != tt.wantStatus {
+					t.Errorf("expected %d, got %d",
+						tt.wantStatus, recorder.Code)
+				}
+
+				// ASSERT: Rejection must not leave database writes behind.
+				var conversationsAfter, membershipsAfter int
+				err = pool.QueryRow(testCtx, `
+				SELECT
+					(SELECT count(*) FROM conversations),
+					(SELECT count(*) FROM conversation_members)
+			`).Scan(&conversationsAfter, &membershipsAfter)
+				if err != nil {
+					t.Fatal(err)
+				}
+
+				if conversationsAfter != conversationsBefore ||
+					membershipsAfter != membershipsBefore {
+					t.Errorf(
+						"rejected request changed rows: conversations %d→%d, memberships %d→%d",
+						conversationsBefore, conversationsAfter,
+						membershipsBefore, membershipsAfter,
+					)
+				}
+			})
+		}
+	})
 }
