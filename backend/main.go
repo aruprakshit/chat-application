@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"log"
@@ -10,53 +9,6 @@ import (
 	"os"
 	"time"
 )
-
-type HealthResponse struct {
-	Status  string `json:"status"`
-	Service string `json:"service"`
-}
-
-func newRouter(pool *pgxpool.Pool) http.Handler {
-	// Default to HTTPS-only cookies.
-	// Disable explicitly only for local HTTP development.
-	secureCookie := os.Getenv("COOKIE_SECURE") != "false"
-
-	mux := http.NewServeMux()
-	mux.HandleFunc("GET /health", healthHandler)
-	mux.HandleFunc("GET /ready", readinessHandler(pool))
-	mux.HandleFunc("GET /users", usersHandler(pool))
-	mux.HandleFunc("POST /users", createUserHandler(pool))
-	mux.Handle("GET /me", requireAuth(pool, http.HandlerFunc(meHandler)))
-	mux.HandleFunc("POST /login", loginHandler(pool, secureCookie))
-	mux.Handle("GET /conversations", requireAuth(pool, conversationsHandler(pool)))
-	mux.Handle(
-		"POST /conversations",
-		http.NewCrossOriginProtection().Handler(
-			requireAuth(pool, createConversationHandler(pool)),
-		),
-	)
-	// Block cross-origin browser requests that could log a user out.
-	mux.Handle(
-		"POST /logout",
-		http.NewCrossOriginProtection().Handler(
-			logoutHandler(pool, secureCookie),
-		),
-	)
-	return mux
-}
-
-func healthHandler(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Content-Type", "application/json")
-
-	response := HealthResponse{
-		Status:  "ok",
-		Service: "chat-backend",
-	}
-
-	if err := json.NewEncoder(w).Encode(response); err != nil {
-		log.Printf("Failed to write health response: %v", err)
-	}
-}
 
 func main() {
 	if err := run(); err != nil {

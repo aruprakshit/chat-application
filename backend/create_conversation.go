@@ -6,7 +6,6 @@ import (
 	"errors"
 	"io"
 	"log"
-	"mime"
 	"net/http"
 	"time"
 
@@ -29,12 +28,7 @@ func createConversationHandler(pool *pgxpool.Pool) http.HandlerFunc {
 		}
 
 		// 2. REQUIRE JSON INPUT
-		contentType, _, err := mime.ParseMediaType(
-			r.Header.Get("Content-Type"),
-		)
-		if err != nil || contentType != "application/json" {
-			http.Error(w, "Content-Type must be application/json",
-				http.StatusUnsupportedMediaType)
+		if !requireJSONContentType(w, r) {
 			return
 		}
 

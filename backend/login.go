@@ -6,7 +6,6 @@ import (
 	"errors"
 	"io"
 	"log"
-	"mime"
 	"net/http"
 	"time"
 
@@ -26,12 +25,7 @@ func loginHandler(pool *pgxpool.Pool, secureCookie bool) http.HandlerFunc {
 		// Login responses should not be cached.
 		w.Header().Set("Cache-Control", "no-store")
 
-		contentType, _, err := mime.ParseMediaType(
-			r.Header.Get("Content-Type"),
-		)
-		if err != nil || contentType != "application/json" {
-			http.Error(w, "Content-Type must be application/json",
-				http.StatusUnsupportedMediaType)
+		if !requireJSONContentType(w, r) {
 			return
 		}
 
@@ -70,7 +64,7 @@ func loginHandler(pool *pgxpool.Pool, secureCookie bool) http.HandlerFunc {
 		var userID int64
 		var passwordHash string
 
-		err = pool.QueryRow(queryCtx, `
+		err := pool.QueryRow(queryCtx, `
 			SELECT id, COALESCE(password_hash, '')
 			FROM users
 			WHERE username = $1

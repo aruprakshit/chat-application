@@ -9,6 +9,9 @@ playground/
 node_modules/
 .next/
 
+# Backend compiled binary
+backend/chat
+
 # Editor and OS files
 .DS_Store
 Thumbs.db
