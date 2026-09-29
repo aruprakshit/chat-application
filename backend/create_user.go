@@ -6,7 +6,6 @@ import (
 	"errors"
 	"io"
 	"log"
-	"mime"
 	"net/http"
 	"regexp"
 	"time"
@@ -27,11 +26,7 @@ type CreateUserRequest struct {
 func createUserHandler(pool *pgxpool.Pool) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		// 1. CHECK THE REQUEST FORMAT
-		// ParseMediaType also accepts application/json; charset=utf-8.
-		contentType, _, err := mime.ParseMediaType(r.Header.Get("Content-Type"))
-		if err != nil || contentType != "application/json" {
-			http.Error(w, "Content-Type must be application/json",
-				http.StatusUnsupportedMediaType)
+		if !requireJSONContentType(w, r) {
 			return
 		}
 
