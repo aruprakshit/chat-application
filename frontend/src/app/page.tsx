@@ -33,7 +33,7 @@ export default function Home() {
               target="_blank"
               rel="noopener noreferrer"
             >
-              Learning
+              Building chat apps with Next.js and Tailwind CSS
             </a>{" "}
             center.
           </p>
@@ -52,7 +52,7 @@ export default function Home() {
               width={16}
               height={14}
             />
-            Deploy Now
+            Deploy Now Arup
           </a>
           <a
             className={styles.secondary}

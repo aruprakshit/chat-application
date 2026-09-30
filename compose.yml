@@ -89,6 +89,18 @@ services:
     depends_on:
       test-migrate:
         condition: service_completed_successfully
+  frontend:
+    image: node:26-alpine
+    working_dir: /app
+    user: "${LOCAL_UID:-1000}:${LOCAL_GID:-1000}"
+    environment:
+      HOME: /tmp
+      NEXT_TELEMETRY_DISABLED: "1"
+    volumes:
+      - ./frontend:/app
+    ports:
+      - "3000:3000"
+    command: ["npm", "run", "dev", "--", "--hostname", "0.0.0.0"]
 
 volumes:
   postgres_data:
