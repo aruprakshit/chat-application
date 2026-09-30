@@ -1,69 +1,117 @@
-import Image from "next/image";
-import styles from "./page.module.css";
+"use client";
+
+import { useState, type FormEvent } from "react";
 
 export default function Home() {
-  return (
-    <div className={styles.page}>
-      <main className={styles.main}>
-        <Image
-          className={styles.logo}
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className={styles.intro}>
-          <h1>
-            To get started, edit the{" "}
-            <code className={styles.code}>page.tsx</code> file.
-          </h1>
-          <p>
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              target="_blank"
-              rel="noopener noreferrer"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              target="_blank"
-              rel="noopener noreferrer"
-            >
-              Building chat apps with Next.js and Tailwind CSS
-            </a>{" "}
-            center.
-          </p>
-        </div>
-        <div className={styles.ctas}>
-          <a
-            className={styles.primary}
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className={styles.logo}
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={14}
-            />
-            Deploy Now Arup
-          </a>
-          <a
-            className={styles.secondary}
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
-        </div>
+  // 1. STORE FORM VALUES AND REQUEST STATE
+  const [username, setUsername] = useState("");
+  const [password, setPassword] = useState("");
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [error, setError] = useState("");
+  const [isLoggedIn, setIsLoggedIn] = useState(false);
+
+  async function handleLogin(event: FormEvent<HTMLFormElement>) {
+    // 2. HANDLE THE FORM WITHOUT RELOADING THE PAGE
+    event.preventDefault();
+
+    if (isSubmitting) {
+      return;
+    }
+
+    setIsSubmitting(true);
+    setError("");
+
+    try {
+      // 3. SUBMIT CREDENTIALS THROUGH THE NEXT.JS REWRITE
+      const response = await fetch("/api/login", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        credentials: "same-origin",
+        body: JSON.stringify({ username, password }),
+      });
+
+      // 4. TRANSLATE HTTP RESULTS INTO USER-FACING MESSAGES
+      if (response.status === 401) {
+        setError("Incorrect username or password.");
+        return;
+      }
+
+      if (response.status === 400) {
+        setError("Please check your username and password.");
+        return;
+      }
+
+      if (!response.ok) {
+        setError("Login is unavailable right now. Please try again.");
+        return;
+      }
+
+      // Go returns 204 with no body, so do not call response.json().
+      // The browser stores the session cookie from the response.
+      setPassword("");
+      setIsLoggedIn(true);
+    } catch {
+      // fetch throws for network failures, not ordinary HTTP errors.
+      setError("Could not reach the server. Please try again.");
+    } finally {
+      // 5. RE-ENABLE THE FORM AFTER EVERY OUTCOME
+      setIsSubmitting(false);
+    }
+  }
+
+  // 6. DISPLAY A TEMPORARY SUCCESS VIEW
+  if (isLoggedIn) {
+    return (
+      <main>
+        <h1>Login successful</h1>
+        <p>Your session has been created.</p>
       </main>
-    </div>
+    );
+  }
+
+  // 7. RENDER THE LOGIN FORM
+  return (
+    <main>
+      <h1>Chat login</h1>
+      <p>Sign in with an account you created through the API.</p>
+
+      <form onSubmit={handleLogin} aria-busy={isSubmitting}>
+        <div>
+          <label htmlFor="username">Username</label>
+          <input
+            id="username"
+            name="username"
+            type="text"
+            autoComplete="username"
+            required
+            value={username}
+            onChange={(event) => setUsername(event.target.value)}
+            disabled={isSubmitting}
+          />
+        </div>
+
+        <div>
+          <label htmlFor="password">Password</label>
+          <input
+            id="password"
+            name="password"
+            type="password"
+            autoComplete="current-password"
+            required
+            value={password}
+            onChange={(event) => setPassword(event.target.value)}
+            disabled={isSubmitting}
+          />
+        </div>
+
+        {error && <p role="alert">{error}</p>}
+
+        <button type="submit" disabled={isSubmitting}>
+          {isSubmitting ? "Signing in…" : "Sign in"}
+        </button>
+      </form>
+    </main>
   );
 }
