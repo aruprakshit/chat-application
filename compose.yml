@@ -96,6 +96,7 @@ services:
     environment:
       HOME: /tmp
       NEXT_TELEMETRY_DISABLED: "1"
+      BACKEND_URL: "http://backend:9090"
     volumes:
       - ./frontend:/app
     ports:
