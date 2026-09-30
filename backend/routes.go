@@ -50,6 +50,10 @@ func newRouter(pool *pgxpool.Pool) http.Handler {
 			logoutHandler(pool, secureCookie),
 		),
 	)
+	mux.Handle(
+		"GET /conversations/{id}/messages",
+		requireAuth(pool, listMessagesHandler(pool)),
+	)
 	return mux
 }
 
