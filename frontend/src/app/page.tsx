@@ -16,6 +16,8 @@ export default function Home() {
   const [user, setUser] = useState<User | null>(null);
   const [isCheckingSession, setIsCheckingSession] = useState(true);
   const [sessionError, setSessionError] = useState("");
+  const [isLoggingOut, setIsLoggingOut] = useState(false);
+  const [logoutError, setLogoutError] = useState("");
 
   // RESTORE THE SESSION WHEN THIS COMPONENT MOUNTS
   useEffect(() => {
@@ -128,6 +130,40 @@ export default function Home() {
     }
   }
 
+  async function handleLogout() {
+    // 1. PREVENT REPEATED SUBMISSIONS
+    if (isLoggingOut) {
+      return;
+    }
+
+    setIsLoggingOut(true);
+    setLogoutError("");
+
+    try {
+      // 2. ASK GO TO REVOKE THE SESSION AND CLEAR THE COOKIE
+      const response = await fetch("/api/logout", {
+        method: "POST",
+        credentials: "same-origin",
+      });
+
+      if (!response.ok) {
+        setLogoutError("Could not sign out. Please try again.");
+        return;
+      }
+
+      // 3. CLEAR LOCAL STATE AFTER THE SERVER CONFIRMS SUCCESS
+      // The response has no JSON body.
+      setUser(null);
+      setUsername("");
+      setPassword("");
+      setError("");
+    } catch {
+      setLogoutError("Could not reach the server. Please try again.");
+    } finally {
+      setIsLoggingOut(false);
+    }
+  }
+
   if (isCheckingSession) {
     return (
       <main>
@@ -151,6 +187,12 @@ export default function Home() {
       <main>
         <h1>Welcome, {user.username}</h1>
         <p>You are signed in.</p>
+
+        {logoutError && <p role="alert">{logoutError}</p>}
+
+        <button type="button" onClick={handleLogout} disabled={isLoggingOut}>
+          {isLoggingOut ? "Signing out…" : "Sign out"}
+        </button>
       </main>
     );
   }
