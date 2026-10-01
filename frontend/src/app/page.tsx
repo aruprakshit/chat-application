@@ -1,6 +1,11 @@
 "use client";
 
-import { useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent } from "react";
+
+type User = {
+  id: number;
+  username: string;
+};
 
 export default function Home() {
   // 1. STORE FORM VALUES AND REQUEST STATE
@@ -8,7 +13,54 @@ export default function Home() {
   const [password, setPassword] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState("");
-  const [isLoggedIn, setIsLoggedIn] = useState(false);
+  const [user, setUser] = useState<User | null>(null);
+const [isCheckingSession, setIsCheckingSession] = useState(true);
+const [sessionError, setSessionError] = useState("");
+
+// RESTORE THE SESSION WHEN THIS COMPONENT MOUNTS
+useEffect(() => {
+  const controller = new AbortController();
+
+  async function restoreSession() {
+    try {
+      const response = await fetch("/api/me", {
+        credentials: "same-origin",
+        cache: "no-store",
+        signal: controller.signal,
+      });
+
+      // A missing or expired session is an ordinary logged-out state.
+      if (response.status === 401) {
+        return;
+      }
+
+      if (!response.ok) {
+        throw new Error("Session check failed");
+      }
+
+      const currentUser: User = await response.json();
+
+      if (!controller.signal.aborted) {
+        setUser(currentUser);
+      }
+    } catch {
+      if (!controller.signal.aborted) {
+        setSessionError(
+          "We couldn't check your session. Please reload to try again.",
+        );
+      }
+    } finally {
+      if (!controller.signal.aborted) {
+        setIsCheckingSession(false);
+      }
+    }
+  }
+
+  void restoreSession();
+
+  // Cancel this request if the component is removed.
+  return () => controller.abort();
+}, []);
 
   async function handleLogin(event: FormEvent<HTMLFormElement>) {
     // 2. HANDLE THE FORM WITHOUT RELOADING THE PAGE
@@ -51,7 +103,22 @@ export default function Home() {
       // Go returns 204 with no body, so do not call response.json().
       // The browser stores the session cookie from the response.
       setPassword("");
-      setIsLoggedIn(true);
+
+// The login response has no body. Fetch the verified user separately.
+const meResponse = await fetch("/api/me", {
+  credentials: "same-origin",
+  cache: "no-store",
+});
+
+if (!meResponse.ok) {
+  setError(
+    "Login succeeded, but we couldn't load your account. Please reload.",
+  );
+  return;
+}
+
+const currentUser: User = await meResponse.json();
+setUser(currentUser);
     } catch {
       // fetch throws for network failures, not ordinary HTTP errors.
       setError("Could not reach the server. Please try again.");
@@ -61,15 +128,35 @@ export default function Home() {
     }
   }
 
-  // 6. DISPLAY A TEMPORARY SUCCESS VIEW
-  if (isLoggedIn) {
-    return (
-      <main>
-        <h1>Login successful</h1>
-        <p>Your session has been created.</p>
-      </main>
-    );
-  }
+
+  if (isCheckingSession) {
+  return (
+    <main>
+      <p role="status">Checking your session…</p>
+    </main>
+  );
+}
+
+if (sessionError) {
+  return (
+    <main>
+      <h1>Unable to check session</h1>
+      <p role="alert">{sessionError}</p>
+      <button onClick={() => window.location.reload()}>
+        Try again
+      </button>
+    </main>
+  );
+}
+
+if (user) {
+  return (
+    <main>
+      <h1>Welcome, {user.username}</h1>
+      <p>You are signed in.</p>
+    </main>
+  );
+}
 
   // 7. RENDER THE LOGIN FORM
   return (
