@@ -14,53 +14,53 @@ export default function Home() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState("");
   const [user, setUser] = useState<User | null>(null);
-const [isCheckingSession, setIsCheckingSession] = useState(true);
-const [sessionError, setSessionError] = useState("");
+  const [isCheckingSession, setIsCheckingSession] = useState(true);
+  const [sessionError, setSessionError] = useState("");
 
-// RESTORE THE SESSION WHEN THIS COMPONENT MOUNTS
-useEffect(() => {
-  const controller = new AbortController();
+  // RESTORE THE SESSION WHEN THIS COMPONENT MOUNTS
+  useEffect(() => {
+    const controller = new AbortController();
 
-  async function restoreSession() {
-    try {
-      const response = await fetch("/api/me", {
-        credentials: "same-origin",
-        cache: "no-store",
-        signal: controller.signal,
-      });
+    async function restoreSession() {
+      try {
+        const response = await fetch("/api/me", {
+          credentials: "same-origin",
+          cache: "no-store",
+          signal: controller.signal,
+        });
 
-      // A missing or expired session is an ordinary logged-out state.
-      if (response.status === 401) {
-        return;
-      }
+        // A missing or expired session is an ordinary logged-out state.
+        if (response.status === 401) {
+          return;
+        }
 
-      if (!response.ok) {
-        throw new Error("Session check failed");
-      }
+        if (!response.ok) {
+          throw new Error("Session check failed");
+        }
 
-      const currentUser: User = await response.json();
+        const currentUser: User = await response.json();
 
-      if (!controller.signal.aborted) {
-        setUser(currentUser);
-      }
-    } catch {
-      if (!controller.signal.aborted) {
-        setSessionError(
-          "We couldn't check your session. Please reload to try again.",
-        );
-      }
-    } finally {
-      if (!controller.signal.aborted) {
-        setIsCheckingSession(false);
+        if (!controller.signal.aborted) {
+          setUser(currentUser);
+        }
+      } catch {
+        if (!controller.signal.aborted) {
+          setSessionError(
+            "We couldn't check your session. Please reload to try again.",
+          );
+        }
+      } finally {
+        if (!controller.signal.aborted) {
+          setIsCheckingSession(false);
+        }
       }
     }
-  }
 
-  void restoreSession();
+    void restoreSession();
 
-  // Cancel this request if the component is removed.
-  return () => controller.abort();
-}, []);
+    // Cancel this request if the component is removed.
+    return () => controller.abort();
+  }, []);
 
   async function handleLogin(event: FormEvent<HTMLFormElement>) {
     // 2. HANDLE THE FORM WITHOUT RELOADING THE PAGE
@@ -104,21 +104,21 @@ useEffect(() => {
       // The browser stores the session cookie from the response.
       setPassword("");
 
-// The login response has no body. Fetch the verified user separately.
-const meResponse = await fetch("/api/me", {
-  credentials: "same-origin",
-  cache: "no-store",
-});
+      // The login response has no body. Fetch the verified user separately.
+      const meResponse = await fetch("/api/me", {
+        credentials: "same-origin",
+        cache: "no-store",
+      });
 
-if (!meResponse.ok) {
-  setError(
-    "Login succeeded, but we couldn't load your account. Please reload.",
-  );
-  return;
-}
+      if (!meResponse.ok) {
+        setError(
+          "Login succeeded, but we couldn't load your account. Please reload.",
+        );
+        return;
+      }
 
-const currentUser: User = await meResponse.json();
-setUser(currentUser);
+      const currentUser: User = await meResponse.json();
+      setUser(currentUser);
     } catch {
       // fetch throws for network failures, not ordinary HTTP errors.
       setError("Could not reach the server. Please try again.");
@@ -128,35 +128,32 @@ setUser(currentUser);
     }
   }
 
-
   if (isCheckingSession) {
-  return (
-    <main>
-      <p role="status">Checking your session…</p>
-    </main>
-  );
-}
+    return (
+      <main>
+        <p role="status">Checking your session…</p>
+      </main>
+    );
+  }
 
-if (sessionError) {
-  return (
-    <main>
-      <h1>Unable to check session</h1>
-      <p role="alert">{sessionError}</p>
-      <button onClick={() => window.location.reload()}>
-        Try again
-      </button>
-    </main>
-  );
-}
+  if (sessionError) {
+    return (
+      <main>
+        <h1>Unable to check session</h1>
+        <p role="alert">{sessionError}</p>
+        <button onClick={() => window.location.reload()}>Try again</button>
+      </main>
+    );
+  }
 
-if (user) {
-  return (
-    <main>
-      <h1>Welcome, {user.username}</h1>
-      <p>You are signed in.</p>
-    </main>
-  );
-}
+  if (user) {
+    return (
+      <main>
+        <h1>Welcome, {user.username}</h1>
+        <p>You are signed in.</p>
+      </main>
+    );
+  }
 
   // 7. RENDER THE LOGIN FORM
   return (
