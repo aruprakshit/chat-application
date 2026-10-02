@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useCallback, useState, type FormEvent } from "react";
+import ConversationsPanel from "@/components/conversations-panel";
 
 type User = {
   id: number;
@@ -18,6 +19,13 @@ export default function Home() {
   const [sessionError, setSessionError] = useState("");
   const [isLoggingOut, setIsLoggingOut] = useState(false);
   const [logoutError, setLogoutError] = useState("");
+
+  // Clear the authenticated view when an API reports an expired session.
+  const handleSessionExpired = useCallback(() => {
+    setUser(null);
+    setPassword("");
+    setError("Your session has expired. Please sign in again.");
+  }, []);
 
   // RESTORE THE SESSION WHEN THIS COMPONENT MOUNTS
   useEffect(() => {
@@ -186,6 +194,10 @@ export default function Home() {
     return (
       <main>
         <h1>Welcome, {user.username}</h1>
+        <section aria-labelledby="conversations-heading">
+          <h2 id="conversations-heading">Your conversations</h2>
+          <ConversationsPanel onSessionExpired={handleSessionExpired} />
+        </section>
         <p>You are signed in.</p>
 
         {logoutError && <p role="alert">{logoutError}</p>}
