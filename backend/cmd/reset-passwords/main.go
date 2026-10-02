@@ -97,22 +97,20 @@ func parseOptions(args []string, output io.Writer) (resetOptions, error) {
 }
 
 func run(args []string) error {
-	// 1. VALIDATE THE TARGET
-	_, err := parseOptions(args, os.Stderr)
+	// 1. VALIDATE THE TARGET BEFORE DATABASE WORK
+	options, err := parseOptions(args, os.Stderr)
 	if err != nil {
 		return err
 	}
 
-	// 2. VALIDATE CONFIGURATION BEFORE DATABASE WORK
-	_, err = loadConfig(os.Getenv)
+	// 2. VALIDATE REQUIRED ENVIRONMENT VALUES
+	config, err := loadConfig(os.Getenv)
 	if err != nil {
 		return err
 	}
 
-	// Temporary checkpoint: no database changes are made yet.
-	return errors.New(
-		"target and configuration accepted; password reset is not implemented yet",
-	)
+	// 3. EXECUTE THE RESET
+	return executeReset(options, config)
 }
 
 func main() {
