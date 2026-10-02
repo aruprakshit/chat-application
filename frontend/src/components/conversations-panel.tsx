@@ -2,8 +2,10 @@
 
 import { useEffect, useState } from "react";
 import ConversationList, { type Conversation } from "./conversation-list";
+import MessageHistory from "./message-history";
 
 type ConversationsPanelProps = {
+  currentUserId: number;
   onSessionExpired: () => void;
 };
 
@@ -14,6 +16,7 @@ type LoadState =
   | { status: "error"; message: string };
 
 export default function ConversationsPanel({
+  currentUserId,
   onSessionExpired,
 }: ConversationsPanelProps) {
   const [state, setState] = useState<LoadState>({ status: "loading" });
@@ -105,7 +108,12 @@ export default function ConversationsPanel({
         {selectedConversationId === null ? (
           <p>Select a conversation to read its messages.</p>
         ) : (
-          <p>Selected conversation: #{selectedConversationId}</p>
+          <MessageHistory
+            key={selectedConversationId}
+            conversationId={selectedConversationId}
+            currentUserId={currentUserId}
+            onSessionExpired={onSessionExpired}
+          />
         )}
       </section>
     </div>
