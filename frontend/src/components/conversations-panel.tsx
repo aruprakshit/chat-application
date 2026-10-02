@@ -18,6 +18,9 @@ export default function ConversationsPanel({
 }: ConversationsPanelProps) {
   const [state, setState] = useState<LoadState>({ status: "loading" });
   const [attempt, setAttempt] = useState(0);
+  const [selectedConversationId, setSelectedConversationId] = useState<
+    number | null
+  >(null);
 
   useEffect(() => {
     // 1. CREATE A CANCELLABLE REQUEST
@@ -88,5 +91,23 @@ export default function ConversationsPanel({
     );
   }
 
-  return <ConversationList conversations={state.conversations} />;
+  return (
+    <div>
+      <ConversationList
+        conversations={state.conversations}
+        selectedConversationId={selectedConversationId}
+        onSelect={setSelectedConversationId}
+      />
+
+      <section aria-labelledby="message-history-heading">
+        <h2 id="message-history-heading">Messages</h2>
+
+        {selectedConversationId === null ? (
+          <p>Select a conversation to read its messages.</p>
+        ) : (
+          <p>Selected conversation: #{selectedConversationId}</p>
+        )}
+      </section>
+    </div>
+  );
 }
