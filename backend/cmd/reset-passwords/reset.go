@@ -65,9 +65,6 @@ func resetPasswords(
 		return 0, errors.New("could not finish reading users")
 	}
 
-	// Release the result set before issuing another query on this connection.
-	rows.Close()
-
 	if len(userIDs) == 0 && !options.All {
 		return 0, errors.New("specified username does not exist")
 	}

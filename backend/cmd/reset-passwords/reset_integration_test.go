@@ -169,3 +169,198 @@ func TestResetPasswordsTargetsOneUser(t *testing.T) {
 		}
 	}
 }
+
+func TestResetPasswordsAllUsers(t *testing.T) {
+	// ARRANGE: Use tables isolated from every other test.
+	pool := isolatedTestPool(t)
+
+	ctx, cancel := context.WithTimeout(
+		context.Background(), 15*time.Second,
+	)
+	defer cancel()
+
+	const newPassword = "bulk-replacement-password"
+
+	var userIDs []int64
+
+	for _, username := range []string{"bulk_alice", "bulk_charlie"} {
+		var id int64
+
+		// NULL represents a user whose password has not yet been set.
+		err := pool.QueryRow(ctx, `
+			INSERT INTO users (username)
+			VALUES ($1)
+			RETURNING id
+		`, username).Scan(&id)
+		if err != nil {
+			t.Fatalf("create user: %v", err)
+		}
+		userIDs = append(userIDs, id)
+
+		tokenHash := sha256.Sum256([]byte(rand.Text()))
+
+		_, err = pool.Exec(ctx, `
+			INSERT INTO sessions (token_hash, user_id, expires_at)
+			VALUES ($1, $2, CURRENT_TIMESTAMP + INTERVAL '1 hour')
+		`, tokenHash[:], id)
+		if err != nil {
+			t.Fatalf("create session: %v", err)
+		}
+	}
+
+	// ACT: Reset every user visible through the isolated pool.
+	count, err := resetPasswords(
+		ctx, pool, resetOptions{All: true}, newPassword,
+	)
+	if err != nil {
+		t.Fatalf("bulk reset: %v", err)
+	}
+
+	// ASSERT: Both users received the new password.
+	if count != 2 {
+		t.Fatalf("expected 2 reset users, got %d", count)
+	}
+
+	hashes := make([]string, len(userIDs))
+
+	for i, id := range userIDs {
+		err := pool.QueryRow(ctx, `
+			SELECT password_hash FROM users WHERE id = $1
+		`, id).Scan(&hashes[i])
+		if err != nil {
+			t.Fatalf("read password hash: %v", err)
+		}
+
+		if err := bcrypt.CompareHashAndPassword(
+			[]byte(hashes[i]), []byte(newPassword),
+		); err != nil {
+			t.Errorf("user %d does not have the new password", id)
+		}
+	}
+
+	// ASSERT: Separate bcrypt calls generated independently salted hashes.
+	if hashes[0] == hashes[1] {
+		t.Error("expected different bcrypt hashes for the two users")
+	}
+
+	// ASSERT: All sessions in this isolated schema were revoked.
+	var sessionCount int
+	if err := pool.QueryRow(ctx, `
+		SELECT count(*) FROM sessions
+	`).Scan(&sessionCount); err != nil {
+		t.Fatalf("count sessions: %v", err)
+	}
+
+	if sessionCount != 0 {
+		t.Errorf("expected no sessions, got %d", sessionCount)
+	}
+}
+
+func TestResetPasswordsRollsBackOnSessionDeletionFailure(t *testing.T) {
+	// ARRANGE: Use an isolated schema with the real migrations.
+	pool := isolatedTestPool(t)
+
+	ctx, cancel := context.WithTimeout(
+		context.Background(), 15*time.Second,
+	)
+	defer cancel()
+
+	const username = "rollback_user"
+	const oldPassword = "original-test-password"
+	const newPassword = "replacement-test-password"
+
+	oldHash, err := bcrypt.GenerateFromPassword(
+		[]byte(oldPassword), bcrypt.DefaultCost,
+	)
+	if err != nil {
+		t.Fatal("could not generate fixture hash")
+	}
+
+	var userID int64
+	err = pool.QueryRow(ctx, `
+		INSERT INTO users (username, password_hash)
+		VALUES ($1, $2)
+		RETURNING id
+	`, username, string(oldHash)).Scan(&userID)
+	if err != nil {
+		t.Fatalf("create user: %v", err)
+	}
+
+	tokenHash := sha256.Sum256([]byte(rand.Text()))
+
+	_, err = pool.Exec(ctx, `
+		INSERT INTO sessions (token_hash, user_id, expires_at)
+		VALUES ($1, $2, CURRENT_TIMESTAMP + INTERVAL '1 hour')
+	`, tokenHash[:], userID)
+	if err != nil {
+		t.Fatalf("create session: %v", err)
+	}
+
+	// ARRANGE: Force DELETE to fail after the password UPDATE succeeds.
+	// This trigger exists only in this test's isolated schema.
+	_, err = pool.Exec(ctx, `
+		CREATE FUNCTION reject_test_session_delete()
+		RETURNS trigger
+		LANGUAGE plpgsql
+		AS $$
+		BEGIN
+			RAISE EXCEPTION 'forced session deletion failure';
+		END;
+		$$;
+
+		CREATE TRIGGER reject_test_session_delete
+		BEFORE DELETE ON sessions
+		FOR EACH ROW
+		EXECUTE FUNCTION reject_test_session_delete();
+	`)
+	if err != nil {
+		t.Fatalf("create failure trigger: %v", err)
+	}
+
+	// ACT: The reset must fail when it reaches session deletion.
+	count, err := resetPasswords(
+		ctx,
+		pool,
+		resetOptions{Username: username},
+		newPassword,
+	)
+
+	// ASSERT: Report failure, not a successful reset.
+	if err == nil {
+		t.Fatal("expected session deletion to fail")
+	}
+	if err.Error() != "could not revoke sessions" {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if count != 0 {
+		t.Errorf("expected zero committed resets, got %d", count)
+	}
+
+	// ASSERT: Read committed state after the function's rollback.
+	var storedHash string
+	err = pool.QueryRow(ctx, `
+		SELECT password_hash FROM users WHERE id = $1
+	`, userID).Scan(&storedHash)
+	if err != nil {
+		t.Fatalf("read user after failure: %v", err)
+	}
+
+	if storedHash != string(oldHash) {
+		t.Error("password changed despite transaction failure")
+	}
+
+	// ASSERT: The original session remains.
+	var sessionCount int
+	err = pool.QueryRow(ctx, `
+		SELECT count(*)
+		FROM sessions
+		WHERE user_id = $1 AND token_hash = $2
+	`, userID, tokenHash[:]).Scan(&sessionCount)
+	if err != nil {
+		t.Fatalf("read session after failure: %v", err)
+	}
+
+	if sessionCount != 1 {
+		t.Errorf("expected original session to remain, got %d", sessionCount)
+	}
+}
