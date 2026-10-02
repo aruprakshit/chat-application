@@ -364,3 +364,121 @@ func TestResetPasswordsRollsBackOnSessionDeletionFailure(t *testing.T) {
 		t.Errorf("expected original session to remain, got %d", sessionCount)
 	}
 }
+
+func TestResetPasswordsRejectsMissingUsername(t *testing.T) {
+	// ARRANGE: Create an unrelated user in an isolated schema.
+	pool := isolatedTestPool(t)
+
+	ctx, cancel := context.WithTimeout(
+		context.Background(), 15*time.Second,
+	)
+	defer cancel()
+
+	oldHash, err := bcrypt.GenerateFromPassword(
+		[]byte("original-test-password"), bcrypt.DefaultCost,
+	)
+	if err != nil {
+		t.Fatal("could not generate fixture hash")
+	}
+
+	var userID int64
+	err = pool.QueryRow(ctx, `
+		INSERT INTO users (username, password_hash)
+		VALUES ($1, $2)
+		RETURNING id
+	`, "existing_user", string(oldHash)).Scan(&userID)
+	if err != nil {
+		t.Fatalf("create user: %v", err)
+	}
+
+	tokenHash := sha256.Sum256([]byte(rand.Text()))
+	_, err = pool.Exec(ctx, `
+		INSERT INTO sessions (token_hash, user_id, expires_at)
+		VALUES ($1, $2, CURRENT_TIMESTAMP + INTERVAL '1 hour')
+	`, tokenHash[:], userID)
+	if err != nil {
+		t.Fatalf("create session: %v", err)
+	}
+
+	// ACT: Target a username that does not exist.
+	count, err := resetPasswords(
+		ctx,
+		pool,
+		resetOptions{Username: "missing_user"},
+		"replacement-test-password",
+	)
+
+	// ASSERT: Report the missing user.
+	if err == nil {
+		t.Fatal("expected an error for the missing username")
+	}
+	if err.Error() != "specified username does not exist" {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if count != 0 {
+		t.Errorf("expected zero resets, got %d", count)
+	}
+
+	// ASSERT: Preserve the existing user's password.
+	var storedHash string
+	err = pool.QueryRow(ctx, `
+		SELECT password_hash FROM users WHERE id = $1
+	`, userID).Scan(&storedHash)
+	if err != nil {
+		t.Fatalf("read existing user: %v", err)
+	}
+
+	if storedHash != string(oldHash) {
+		t.Error("unrelated user's password changed")
+	}
+
+	// ASSERT: Preserve the existing session.
+	var sessionCount int
+	err = pool.QueryRow(ctx, `
+		SELECT count(*) FROM sessions WHERE token_hash = $1
+	`, tokenHash[:]).Scan(&sessionCount)
+	if err != nil {
+		t.Fatalf("count existing session: %v", err)
+	}
+
+	if sessionCount != 1 {
+		t.Errorf("expected original session to remain, got %d", sessionCount)
+	}
+}
+
+func TestResetPasswordsAllOnEmptyDatabase(t *testing.T) {
+	// ARRANGE: Real tables, but no users.
+	pool := isolatedTestPool(t)
+
+	ctx, cancel := context.WithTimeout(
+		context.Background(), 15*time.Second,
+	)
+	defer cancel()
+
+	// ACT
+	count, err := resetPasswords(
+		ctx,
+		pool,
+		resetOptions{All: true},
+		"replacement-test-password",
+	)
+
+	// ASSERT: No matching users is a successful no-op for --all.
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if count != 0 {
+		t.Errorf("expected zero resets, got %d", count)
+	}
+
+	var userCount int
+	if err := pool.QueryRow(ctx, `
+		SELECT count(*) FROM users
+	`).Scan(&userCount); err != nil {
+		t.Fatalf("count users: %v", err)
+	}
+
+	if userCount != 0 {
+		t.Errorf("expected database to remain empty, got %d users", userCount)
+	}
+}
