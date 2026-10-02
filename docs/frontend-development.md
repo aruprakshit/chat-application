@@ -119,7 +119,7 @@ The following checks completed successfully through Docker:
 The Go suite includes conversation membership filtering and authentication
 checks. These do not replace the browser checks below.
 
-### Account isolation (browser confirmation pending)
+### Account isolation (passed)
 
 Inspect the expected memberships:
 
@@ -136,10 +136,14 @@ window and a private window so their cookies are separate. Compare the lists
 with the query results. Each account should see only its memberships; shared
 conversations should appear for both members.
 
-Record the two usernames and the observed result after completing this check.
+Accounts tested (user-reported): `alice` and `charlie`.
+
+Result (user-confirmed on 2026-10-02): both accounts saw only their own conversation memberships, matching the expected results.
 Do not record passwords or session tokens.
 
-### Session revocation (browser confirmation pending)
+### Session revocation (passed)
+
+Result (user-confirmed on 2026-10-02): retrying after session revocation returned the UI to the login form with the expiry message. Signing in again succeeded and restored the conversation list.
 
 1. While signed in, block `*api/conversations*` in browser developer tools
    and refresh. Allow `/api/me` to succeed. The conversation panel should
@@ -169,5 +173,5 @@ A full page refresh instead exercises `/api/me`; it does not verify the
 conversation panel's session-expiry callback. A database outage may return
 `503` during authentication and must show a session-check error rather than
 claim that the session expired. The session-check error screen was observed
-in the user's browser; account isolation and the panel's revocation flow
-have not yet been confirmed in this verification record.
+in the user's browser. Account isolation and the panel's revocation flow
+were subsequently confirmed by the user as working as expected.
