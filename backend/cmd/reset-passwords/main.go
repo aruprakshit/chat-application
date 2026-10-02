@@ -14,6 +14,34 @@ type resetOptions struct {
 	All      bool
 }
 
+type resetConfig struct {
+	DatabaseURL string
+	Password    string
+}
+
+func loadConfig(getenv func(string) string) (resetConfig, error) {
+	// 1. REQUIRE AN EXPLICIT DATABASE CONNECTION
+	databaseURL := getenv("DATABASE_URL")
+	if strings.TrimSpace(databaseURL) == "" {
+		return resetConfig{}, errors.New("DATABASE_URL is required")
+	}
+
+	// 2. VALIDATE THE PASSWORD WITHOUT MODIFYING IT
+	// len counts bytes, matching our registration handler's rule.
+	password := getenv("RESET_PASSWORD")
+	if len(password) < 12 || len(password) > 72 {
+		return resetConfig{}, errors.New(
+			"RESET_PASSWORD must be between 12 and 72 bytes",
+		)
+	}
+
+	// Never log this configuration: it contains credentials.
+	return resetConfig{
+		DatabaseURL: databaseURL,
+		Password:    password,
+	}, nil
+}
+
 func parseOptions(args []string, output io.Writer) (resetOptions, error) {
 	// 1. DEFINE THIS COMMAND'S FLAGS
 	// ContinueOnError returns parsing errors instead of exiting.
@@ -69,15 +97,21 @@ func parseOptions(args []string, output io.Writer) (resetOptions, error) {
 }
 
 func run(args []string) error {
-	// 4. VALIDATE THE TARGET BEFORE ANY DATABASE WORK
+	// 1. VALIDATE THE TARGET
 	_, err := parseOptions(args, os.Stderr)
 	if err != nil {
 		return err
 	}
 
-	// Temporary checkpoint: valid flags do not yet execute a reset.
+	// 2. VALIDATE CONFIGURATION BEFORE DATABASE WORK
+	_, err = loadConfig(os.Getenv)
+	if err != nil {
+		return err
+	}
+
+	// Temporary checkpoint: no database changes are made yet.
 	return errors.New(
-		"target accepted; password reset is not implemented yet",
+		"target and configuration accepted; password reset is not implemented yet",
 	)
 }
 
