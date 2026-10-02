@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, type FormEvent } from "react";
+import ConversationList from "@/components/conversation-list";
 
 type User = {
   id: number;
@@ -186,6 +187,10 @@ export default function Home() {
     return (
       <main>
         <h1>Welcome, {user.username}</h1>
+        <section aria-labelledby="conversations-heading">
+          <h2 id="conversations-heading">Your conversations</h2>
+          <ConversationList conversations={[]} />
+        </section>
         <p>You are signed in.</p>
 
         {logoutError && <p role="alert">{logoutError}</p>}
