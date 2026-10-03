@@ -196,7 +196,10 @@ export default function Home() {
         <h1>Welcome, {user.username}</h1>
         <section aria-labelledby="conversations-heading">
           <h2 id="conversations-heading">Your conversations</h2>
-          <ConversationsPanel onSessionExpired={handleSessionExpired} />
+          <ConversationsPanel
+            onSessionExpired={handleSessionExpired}
+            currentUserId={user.id}
+          />
         </section>
         <p>You are signed in.</p>
 

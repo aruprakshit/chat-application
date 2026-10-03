@@ -175,3 +175,17 @@ conversation panel's session-expiry callback. A database outage may return
 claim that the session expired. The session-check error screen was observed
 in the user's browser. Account isolation and the panel's revocation flow
 were subsequently confirmed by the user as working as expected.
+
+## Message history verification
+
+Verified on 2026-10-03:
+
+- Messages display oldest to newest within the loaded history.
+- Older pages are prepended without duplicate messages.
+- The pagination button disappears when no older messages remain.
+- Switching conversations during loading does not display stale history.
+- A blocked pagination request preserves existing messages and shows an error.
+- Disabling request blocking allows retry to succeed.
+
+Request-blocking pattern:
+http://localhost:3000/api/conversations/*/messages*
