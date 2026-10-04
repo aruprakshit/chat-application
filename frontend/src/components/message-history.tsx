@@ -2,14 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import MessageComposer from "./message-composer";
-
-type Message = {
-  id: number;
-  conversation_id: number;
-  sender_id: number;
-  body: string;
-  created_at: string;
-};
+import type { Message } from "@/types/message";
 
 type MessagesResponse = {
   messages: Message[];
@@ -203,6 +196,35 @@ export default function MessageHistory({
     }
   }
 
+  function handleMessageSent(message: Message) {
+    // Ignore an unexpected response for another conversation.
+    if (message.conversation_id !== conversationId) {
+      return;
+    }
+
+    setState((current) => {
+      if (current.status !== "success") {
+        return current;
+      }
+
+      // Avoid inserting the same server-generated ID twice.
+      if (current.messages.some((existing) => existing.id === message.id)) {
+        return current;
+      }
+
+      return {
+        ...current,
+        messages: [...current.messages, message].sort(
+          (left, right) => left.id - right.id,
+        ),
+      };
+    });
+  }
+
+  function handleConversationUnavailable() {
+    setState({ status: "unavailable" });
+  }
+
   // 5. RENDER REQUEST STATES
   if (state.status === "loading") {
     return <p role="status">Loading messages…</p>;
@@ -269,7 +291,12 @@ export default function MessageHistory({
           );
         })}
       </ol>
-      <MessageComposer />
+      <MessageComposer
+        conversationId={conversationId}
+        onMessageSent={handleMessageSent}
+        onSessionExpired={onSessionExpired}
+        onConversationUnavailable={handleConversationUnavailable}
+      />
     </div>
   );
 }
