@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import MessageComposer from "./message-composer";
 
 type Message = {
   id: number;
@@ -226,10 +227,6 @@ export default function MessageHistory({
     );
   }
 
-  if (state.messages.length === 0) {
-    return <p>No messages in this conversation yet.</p>;
-  }
-
   // 6. DISPLAY MESSAGE CONTENT AND AUTHOR INFORMATION
   return (
     <div>
@@ -240,6 +237,9 @@ export default function MessageHistory({
       )}
 
       {olderError && <p role="alert">{olderError}</p>}
+      {state.messages.length === 0 && (
+        <p>No messages in this conversation yet.</p>
+      )}
       <ol style={{ listStyle: "none", padding: 0 }}>
         {state.messages.map((message) => {
           const isMine = message.sender_id === currentUserId;
@@ -269,6 +269,7 @@ export default function MessageHistory({
           );
         })}
       </ol>
+      <MessageComposer />
     </div>
   );
 }
