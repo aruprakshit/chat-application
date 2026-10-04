@@ -100,7 +100,7 @@ services:
     volumes:
       - ./frontend:/app
     ports:
-      - "3000:3000"
+      - "3005:3000"
     command: ["npm", "run", "dev", "--", "--hostname", "0.0.0.0"]
 
 volumes:

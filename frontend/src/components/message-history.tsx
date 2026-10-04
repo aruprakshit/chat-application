@@ -1,14 +1,8 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-
-type Message = {
-  id: number;
-  conversation_id: number;
-  sender_id: number;
-  body: string;
-  created_at: string;
-};
+import MessageComposer from "./message-composer";
+import type { Message } from "@/types/message";
 
 type MessagesResponse = {
   messages: Message[];
@@ -202,6 +196,35 @@ export default function MessageHistory({
     }
   }
 
+  function handleMessageSent(message: Message) {
+    // Ignore an unexpected response for another conversation.
+    if (message.conversation_id !== conversationId) {
+      return;
+    }
+
+    setState((current) => {
+      if (current.status !== "success") {
+        return current;
+      }
+
+      // Avoid inserting the same server-generated ID twice.
+      if (current.messages.some((existing) => existing.id === message.id)) {
+        return current;
+      }
+
+      return {
+        ...current,
+        messages: [...current.messages, message].sort(
+          (left, right) => left.id - right.id,
+        ),
+      };
+    });
+  }
+
+  function handleConversationUnavailable() {
+    setState({ status: "unavailable" });
+  }
+
   // 5. RENDER REQUEST STATES
   if (state.status === "loading") {
     return <p role="status">Loading messages…</p>;
@@ -226,10 +249,6 @@ export default function MessageHistory({
     );
   }
 
-  if (state.messages.length === 0) {
-    return <p>No messages in this conversation yet.</p>;
-  }
-
   // 6. DISPLAY MESSAGE CONTENT AND AUTHOR INFORMATION
   return (
     <div>
@@ -240,6 +259,9 @@ export default function MessageHistory({
       )}
 
       {olderError && <p role="alert">{olderError}</p>}
+      {state.messages.length === 0 && (
+        <p>No messages in this conversation yet.</p>
+      )}
       <ol style={{ listStyle: "none", padding: 0 }}>
         {state.messages.map((message) => {
           const isMine = message.sender_id === currentUserId;
@@ -269,6 +291,12 @@ export default function MessageHistory({
           );
         })}
       </ol>
+      <MessageComposer
+        conversationId={conversationId}
+        onMessageSent={handleMessageSent}
+        onSessionExpired={onSessionExpired}
+        onConversationUnavailable={handleConversationUnavailable}
+      />
     </div>
   );
 }
