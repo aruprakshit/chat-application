@@ -9,6 +9,7 @@ services:
       DATABASE_URL: "postgres://chat:chat_local_only@db:5432/chat?sslmode=disable&pool_max_conns=5"
       # This setting is for our local HTTP setup. A deployed HTTPS environment should use true.
       COOKIE_SECURE: "false"
+      WS_ALLOWED_ORIGIN: "http://localhost:3005"
     ports:
       - "8080:9090"
     command: go run .

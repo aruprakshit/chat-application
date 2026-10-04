@@ -54,6 +54,13 @@ func newRouter(pool *pgxpool.Pool) http.Handler {
 		"GET /conversations/{id}/messages",
 		requireAuth(pool, listMessagesHandler(pool)),
 	)
+	mux.Handle(
+		"GET /ws/conversations/{id}",
+		requireWebSocketOrigin(
+			os.Getenv("WS_ALLOWED_ORIGIN"),
+			requireAuth(pool, conversationSocketHandler(pool)),
+		),
+	)
 	return mux
 }
 
