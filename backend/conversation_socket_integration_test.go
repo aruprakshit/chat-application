@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/coder/websocket"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -117,56 +118,86 @@ func TestConversationSocketMembership(t *testing.T) {
 	t.Setenv("WS_ALLOWED_ORIGIN", origin)
 	router := newRouter(pool)
 
-	tests := []struct {
-		name       string
-		token      string
-		wantStatus int
-		wantBody   string
-	}{
-		{
-			name:       "member reaches connection checkpoint",
-			token:      tokens[0],
-			wantStatus: http.StatusNotImplemented,
-			wantBody:   "WebSocket connection is not implemented yet\n",
-		},
-		{
-			name:       "nonmember cannot connect",
-			token:      tokens[1],
-			wantStatus: http.StatusNotFound,
-			wantBody:   "Conversation not found\n",
-		},
-	}
+	// ARRANGE: Start an actual HTTP server for the upgrade handshake.
+	// ResponseRecorder cannot provide a real network connection.
+	server := httptest.NewServer(router)
+	defer server.Close()
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			// ARRANGE: Use an allowed origin and a real session cookie.
-			request := httptest.NewRequest(
-				http.MethodGet,
-				fmt.Sprintf("/ws/conversations/%d", conversationID),
-				nil,
-			)
-			request.Header.Set("Origin", origin)
-			request.AddCookie(&http.Cookie{
-				Name:  "session",
-				Value: tt.token,
-			})
-			recorder := httptest.NewRecorder()
+	socketURL := "ws" + strings.TrimPrefix(server.URL, "http") +
+		fmt.Sprintf("/ws/conversations/%d", conversationID)
 
-			// ACT: Exercise origin, authentication, and membership checks.
-			router.ServeHTTP(recorder, request)
+	t.Run("member completes handshake", func(t *testing.T) {
+		// ARRANGE
+		dialCtx, dialCancel := context.WithTimeout(
+			context.Background(), 5*time.Second,
+		)
+		defer dialCancel()
 
-			// ASSERT
-			if recorder.Code != tt.wantStatus {
-				t.Fatalf("expected %d, got %d; body=%q",
-					tt.wantStatus, recorder.Code, recorder.Body.String())
-			}
-			if recorder.Body.String() != tt.wantBody {
-				t.Errorf("expected body %q, got %q",
-					tt.wantBody, recorder.Body.String())
-			}
-			if recorder.Header().Get("Cache-Control") != "no-store" {
-				t.Error("expected Cache-Control: no-store")
-			}
-		})
-	}
+		headers := make(http.Header)
+		headers.Set("Origin", origin)
+		headers.Set("Cookie", (&http.Cookie{
+			Name:  "session",
+			Value: tokens[0],
+		}).String())
+
+		// ACT: Send a proper WebSocket upgrade request.
+		conn, response, err := websocket.Dial(
+			dialCtx,
+			socketURL,
+			&websocket.DialOptions{HTTPHeader: headers},
+		)
+		if err != nil {
+			t.Fatalf("connect as member: %v", err)
+		}
+		defer conn.CloseNow()
+
+		// ASSERT: HTTP switched to the WebSocket protocol.
+		if response.StatusCode != http.StatusSwitchingProtocols {
+			t.Fatalf("expected 101, got %d", response.StatusCode)
+		}
+
+		// ASSERT: Our temporary handler closes normally after accepting.
+		// Reading processes the server's close frame.
+		_, _, err = conn.Read(dialCtx)
+		if websocket.CloseStatus(err) != websocket.StatusNormalClosure {
+			t.Fatalf("expected normal WebSocket closure, got %v", err)
+		}
+	})
+
+	t.Run("nonmember cannot complete handshake", func(t *testing.T) {
+		// ARRANGE: Same conversation, different authenticated user.
+		dialCtx, dialCancel := context.WithTimeout(
+			context.Background(), 5*time.Second,
+		)
+		defer dialCancel()
+
+		headers := make(http.Header)
+		headers.Set("Origin", origin)
+		headers.Set("Cookie", (&http.Cookie{
+			Name:  "session",
+			Value: tokens[1],
+		}).String())
+
+		// ACT
+		conn, response, err := websocket.Dial(
+			dialCtx,
+			socketURL,
+			&websocket.DialOptions{HTTPHeader: headers},
+		)
+		if conn != nil {
+			defer conn.CloseNow()
+		}
+
+		// ASSERT: Authorization rejects the request before upgrading.
+		if err == nil {
+			t.Fatal("expected the nonmember connection to fail")
+		}
+		if response == nil {
+			t.Fatal("expected an HTTP rejection response")
+		}
+		if response.StatusCode != http.StatusNotFound {
+			t.Fatalf("expected 404, got %d", response.StatusCode)
+		}
+	})
+
 }

@@ -7,10 +7,11 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/coder/websocket"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-func conversationSocketHandler(pool *pgxpool.Pool) http.HandlerFunc {
+func conversationSocketHandler(pool *pgxpool.Pool, allowedOrigin string) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		// 1. READ THE IDENTITY VERIFIED BY AUTHENTICATION MIDDLEWARE
 		user, ok := r.Context().Value(authContextKey{}).(User)
@@ -57,10 +58,24 @@ func conversationSocketHandler(pool *pgxpool.Pool) http.HandlerFunc {
 			return
 		}
 
-		// 4. TEMPORARY CHECKPOINT
-		// Origin, session, and current membership passed.
-		// No WebSocket upgrade or subscription exists yet.
-		http.Error(w, "WebSocket connection is not implemented yet",
-			http.StatusNotImplemented)
+		// 4. UPGRADE THE AUTHORIZED REQUEST TO WEBSOCKET
+		conn, err := websocket.Accept(w, r, &websocket.AcceptOptions{
+			OriginPatterns: []string{allowedOrigin},
+		})
+		if err != nil {
+			// Accept already writes the HTTP error response.
+			log.Printf("Accept conversation WebSocket: %v", err)
+			return
+		}
+		defer conn.CloseNow()
+
+		// 5. TEMPORARY CHECKPOINT: COMPLETE A NORMAL CLOSE HANDSHAKE
+		// Live subscriptions and message delivery come in the next lesson.
+		if err := conn.Close(
+			websocket.StatusNormalClosure,
+			"Connection checks passed",
+		); err != nil {
+			log.Printf("Close conversation WebSocket: %v", err)
+		}
 	}
 }
